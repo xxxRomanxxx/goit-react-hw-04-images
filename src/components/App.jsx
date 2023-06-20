@@ -1,115 +1,90 @@
-import React from 'react';
+import { useState, useEffect } from 'react';
 import Searchbar from './Searchbar/Searchbar';
 import ImageGallery from './ImageGallery/ImageGallery';
 import Button from './Button/Button';
-import Loader from './Loader/Loader';
 import Modal from './Modal/Modal';
 import css from './App.module.css';
+import api from './Service/Service';
+import Loader from './Loader/Loader';
+import Notiflix from 'notiflix';
 
-export class App extends React.Component {
-  state = {
-    searchQuery: '',
-    images: [],
-    page: 1,
-    showModal: false,
-    isEmpty: false,
-    error: '',
-    isLoading: false,
-    showLoadMore: false,
-    urlModal: '',
+export default function App() {
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [images, setImages] = useState([]);
+  const [page, setPage] = useState(1);
+  const [showModal, setShowModal] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showLoadMore, setShowLoadMore] = useState(false);
+  const [urlModal, setUrlModal] = useState('');
+  const [tags, setTags] = useState('');
+
+  const handleFormSubmit = query => {
+    setSearchQuery(query);
+    setImages([]);
+    setPage(1);
+    setShowLoadMore(false);
   };
   
-  componentDidUpdate(prevProps, prevState) {
-    const prevQuery = prevState.searchQuery;
-    const newQuery = this.state.searchQuery;
-    const prevPage = prevState.page;
-    const newPage = this.state.page;
+  const handleGetImages = async (searchQuery, page) => {
+    setIsLoading(true);
+    
+    try {
+      const response = await api.fetchApi(searchQuery, page);
 
-    if (prevQuery !== newQuery || prevPage !== newPage) {
-      this.handleGetImages(newQuery, newPage);
+      if (response.totalHits === 0) {
+        Notiflix.Notify.warning(`Nothing was found for ${searchQuery}`)
+      }
+      setImages((prevImages) => [...prevImages, ...response.hits]);
+      setShowLoadMore(page < Math.ceil(response.totalHits / 12));
+    } catch (error) {
+      Notiflix.Notify.failure('Sorry, something went wrong!');
+      console.log(error);
+    } finally {
+      setIsLoading(false);
     }
-  }
-
-  handleFormSubmit = query => {
-    this.setState({
-      searchQuery: query,
-      images: [],
-      page: 1,
-      showLoadMore: false,
-      isEmpty: false,
-      error: '',
-    });
-  };
-
-  handleGetImages = (searchQuery, page) => {
-    const BASE_URL = 'https://pixabay.com/api/';
-    const API_KEY = '34311781-efd5fccfe1ca82ca08bcfd072';
-    const url = `${BASE_URL}?q=${searchQuery}&page=${page}&key=${API_KEY}&image_type=photo&orientation=horizontal&per_page=12`;
-    this.setState({ isLoading: true });
-    fetch(url)
-      .then(response => response.json())
-      .then(({ hits, totalHits }) => {
-        if (!hits.length) {
-          this.setState({
-            isEmpty: true,
-          });
-          return;
-        }
-        this.setState({
-          images: [...this.state.images, ...hits],
-          showLoadMore: this.state.page < Math.ceil(totalHits / 12),
-        });
-      })
-      .catch(error => {
-        this.setState({ error: `${error}` });
-      })
-      .finally(() => this.setState({ isLoading: false }));
+    
   };
   
-  toggleOnLoading = () => {
-    this.setState(({ isLoading }) => ({ isLoading: !isLoading }));
+  useEffect(() => {
+    if (searchQuery !== '') {
+      handleGetImages(searchQuery, page);
+    }
+  }, [searchQuery, page]);
+  
+  const onLoadMore = () => {
+    setPage(page + 1);
   };
   
-  onLoadMore = () => {
-    this.setState(({ page }) => ({ page: page + 1 }));
-  };
-  
-  openModal = (url) => {
-    this.setState(() => ({
-      showModal: true,
-      urlModal: url,
-    }));
+  const openModal = (url, tags) => {
+    setShowModal(true);
+    setUrlModal(url);
+    setTags(tags);
   };
 
-  closeModal = () => {
-    this.setState(() => ({
-      showModal: false,
-      urlModal: '',
-    }));
+  const closeModal = () => {
+    setShowModal(false);
+    setUrlModal('');
+    setTags('');
   };
 
-  render () {
     return (
       <div className={css.app}>
-        <Searchbar onSubmit={this.handleFormSubmit}/>
+        <Searchbar onSubmit={handleFormSubmit}/>
         <ImageGallery 
-          images={this.state.images} openModal={this.openModal} toggleOnLoading={this.toggleOnLoading}
+          images={images} openModal={openModal}
         />
-        {this.state.showLoadMore && <Button onLoadMore={this.onLoadMore} />}
-        {this.state.isLoading && <Loader />}
-        {this.state.showModal && (
-          <Modal onClose={this.closeModal}>
+        {showLoadMore && <Button onLoadMore={onLoadMore} />}
+        {isLoading && <Loader />}
+        {showModal && (
+          <Modal onClose={closeModal}>
             <img
-              onLoad={this.toggleOnLoading}
-              src={this.state.urlModal}
-              alt=""
+              src={urlModal}
+              alt={tags}
               className={css['modal-img']}
             />
           </Modal>
         )}
       </div>
     );
-  }
 };
-
-export default App;
